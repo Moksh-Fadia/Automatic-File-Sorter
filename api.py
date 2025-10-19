@@ -1,10 +1,8 @@
 from fastapi import FastAPI, HTTPException      # httpexception is used to raise http errors (eg: 404, 400, 500)
-from pydantic import BaseModel      # used for POST endpoint /move-file 
 import os    # to check if file exists
 import sqlite3
 from main import scan_existing_files, move_file, dest_dir_music, dest_dir_video, dest_dir_image, dest_dir_documents, image_extensions, audio_extensions, video_extensions, document_extensions
 from os.path import join
-from datetime import datetime
 from fastapi import UploadFile, File      # UploadFile handles incoming files accessing their data; File is used to specify that the endpoint expects a file upload
 
 conn = sqlite3.connect("files_db.db")
@@ -38,7 +36,6 @@ def scan_files():
         cursor = conn.cursor()
 # instead of using a global cursor (which is thread-unsafe), we pass the cursor from the request-specific connection; this way each fastapi request uses its own db connection and cursor, preventing the SQLite threading error        
         scan_existing_files(cursor, conn)  # modified scan_existing_files to accept cursor
-        conn.commit()
         conn.close()
         return {"status": "success", "message": "Existing files scanned and added to DB."}
     except Exception as e:
@@ -92,8 +89,10 @@ def upload_file(file: UploadFile = File(...)):
     dummy = DummyEntry(dest_path, filename)     # creates an instance of the dummy object pointing to the file just saved
 
 # move the file using your existing main.py logic
-    try:
-        move_file(dest, dummy, filename, file_type)  
+    try:    
+        conn = get_db_connection()      # This ensures each request has its own SQLite connection
+        move_file(dest, dummy, filename, file_type, conn=conn)
+        conn.close()  
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

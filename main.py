@@ -1,5 +1,5 @@
 import os    
-from os import scandir, rename      # scandir() returns an iterator of DirEntry objects; a DirEntry object has attributes like name, path, is_file() [checks if its a file], is_dir() [checks if its a directory]
+from os import scandir     # scandir() returns an iterator of DirEntry objects; a DirEntry object has attributes like name, path, is_file() [checks if its a file], is_dir() [checks if its a directory]
 from os.path import splitext, exists, join    # join combines paths with /
 from shutil import move     
 from time import sleep      
@@ -19,12 +19,14 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S')
 
 # setup
-source_dir = "/Users/mokshfadia/Desktop/FileSorter"       
+source_dir = "./FileSorter"       
 dest_dir_music = join(source_dir, "Audio")   
 dest_dir_video = join(source_dir, "Videos")     
 dest_dir_image = join(source_dir, "Images")
 dest_dir_documents = join(source_dir, "Documents")
 
+for folder in [source_dir, dest_dir_music, dest_dir_video, dest_dir_image, dest_dir_documents]:
+    os.makedirs(folder, exist_ok=True)
 
 image_extensions = [".jpg", ".jpeg", ".jpe", ".jif", ".jfif", ".jfi", ".png", ".gif", ".webp", ".tiff", ".tif",
 ".psd", ".raw", ".arw", ".cr2", ".nrw", ".k25", ".bmp", ".dib", ".heif", ".heic", ".ind", ".indd", ".indt", ".jp2",
@@ -53,7 +55,7 @@ def make_unique(dest, name):
 
 # dest here is the respective folder where the file is to be moved (ie. Music, Video, Image, Document)
 # The source is always the top-level FileSorter folder (where the file is intially placed). The destination is the proper subfolder inside FileSorter (where the file is eventually moved to)
-def move_file(dest, entry, name, file_type):    # this func expects a DirEntry-like object  
+def move_file(dest, entry, name, file_type, conn=None):    # this func expects a DirEntry-like object  
     if name.startswith("."):  # skip hidden files like .DS_Store
         return
 
@@ -66,8 +68,14 @@ def move_file(dest, entry, name, file_type):    # this func expects a DirEntry-l
 
 # inserting record
     moved_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")     # timestamp
-    conn = sqlite3.connect("files_db.db")
-    cursor = conn.cursor()    
+
+    # use the passed connection or create a new one
+    own_conn = False    
+    if conn is None:
+        conn = sqlite3.connect("files_db.db")
+        own_conn = True
+    cursor = conn.cursor()   
+
     cursor.execute("""
         SELECT COUNT(*) FROM files_table WHERE source_path = ?           -- counts the number of rows with this source_path (ie. to avoid duplicate entries in database)
     """, (entry.path,))
@@ -77,20 +85,19 @@ def move_file(dest, entry, name, file_type):    # this func expects a DirEntry-l
             VALUES (?, ?, ?, ?, ?)
         """, (name, file_type, entry.path, join(dest, name), moved_at))
         conn.commit()
-    conn.close()    
+
+    if own_conn:
+        conn.close()
 
 
 # scans existing files (those files which were already present before script started running) in destination folders and adds them to the database if not already present
-def scan_existing_files():
+def scan_existing_files(cursor, conn):
     categories = {
         "Audio": dest_dir_music,
         "Videos": dest_dir_video,
         "Images": dest_dir_image,
         "Documents": dest_dir_documents
     }
-
-    conn = sqlite3.connect("files_db.db")
-    cursor = conn.cursor()
 
     for file_type, folder in categories.items():     
 # file_type = key (Audio, Videos, Images, Documents); folder = value (respective folder path)
@@ -109,13 +116,12 @@ def scan_existing_files():
                         VALUES (?, ?, ?, ?, ?)
                     """, (filename, file_type, file_path, file_path, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     conn.commit()   
-    conn.close()
 
 
 class MoverHandler(FileSystemEventHandler):      # base class to respond to file system events; its job is to define what should happen when files change in the folder
 
 # Processes/works for all files that are created/modified in source_dir after startup ie. when script is running   
-    def on_modified(self, event):     # called automatically when any file in source_dir changes (created, edited)
+    def on_modified(self):     # called automatically when any file in source_dir changes (created, edited)
         with scandir(source_dir) as entries:     # iterates over all files in source_dir (FileSorter folder)
             for entry in entries:      # entry is a DirEntry object with attributes like name, path, is_file(), is_dir()        
 # each entry is a file/folder in source_dir (FileSorter)
