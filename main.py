@@ -10,6 +10,7 @@ from watchdog.events import FileSystemEventHandler      # class to handle file s
 from concurrent.futures import ThreadPoolExecutor    # for concurrent processing of multiple files
 from datetime import datetime
 import sqlite3
+from fastapi import HTTPException
 
 # Logging configuration
 logging.basicConfig(
@@ -53,6 +54,7 @@ def make_unique(dest, name):
     return name
 
 
+
 # dest here is the respective folder where the file is to be moved (ie. Music, Video, Image, Document)
 # The source is always the top-level FileSorter folder (where the file is intially placed). The destination is the proper subfolder inside FileSorter (where the file is eventually moved to)
 def move_file(dest, entry, name, file_type, conn=None):    # this func expects a DirEntry-like object  
@@ -68,7 +70,10 @@ def move_file(dest, entry, name, file_type, conn=None):    # this func expects a
         name = make_unique(dest, name)
 
 # entry.path = (built-in attribute of DirEntry object) gets the full path of the file to be moved
-    move(entry.path, join(dest, name))   # moves the file from source (FileSorter) to destination (Music, Video, Image, Document)
+    src_path = os.path.abspath(entry.path)
+    dest_path = os.path.abspath(join(dest, name))
+    move(src_path, dest_path)
+
     logging.info(f"Moved file: {name} to {dest}")     # writing info to log file
 
 # inserting record
@@ -113,8 +118,10 @@ def move_any_file(filepath):
         dest = dest_dir_documents
         file_type = "Documents"
     else:
-        print(f"Unknown file type: {filename}")
-        return
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown file type: {filename}"
+        )
 
 # create a tiny object that mimics the DirEntry-like object your move_file func (from main.py) expects; to reuse the same move_file() function and avoid duplicating logic, we create a tiny object that mimics those attributes and methods
     class DummyEntry:

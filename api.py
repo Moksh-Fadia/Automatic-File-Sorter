@@ -4,6 +4,7 @@ import sqlite3
 from main import scan_existing_files, move_file, dest_dir_music, dest_dir_video, dest_dir_image, dest_dir_documents, image_extensions, audio_extensions, video_extensions, document_extensions, move_any_file
 from os.path import join
 from fastapi import UploadFile, File      # UploadFile handles incoming files accessing their data; File is used to specify that the endpoint expects a file upload
+from typing import Optional
 
 conn = sqlite3.connect("files_db.db")
 cursor = conn.cursor()     # creates a cursor object to execute SQL commands
@@ -54,7 +55,7 @@ def upload_file(file: UploadFile = File(...)):
 # File(...) marks it as a required parameter   
 
     # save the uploaded file temporarily in the main FileSorter folder
-    temp_path = join("./FileSorter", file.filename)
+    temp_path = os.path.abspath(join("./FileSorter", file.filename))
     with open(temp_path, "wb") as f:
         f.write(file.file.read())
 
@@ -68,7 +69,7 @@ def upload_file(file: UploadFile = File(...)):
 
 # GET endpoint that returns DB rows (files from files_table), optionally filtered by file_type query param
 @app.get("/files")
-def list_files(file_type: str = None):
+def list_files(file_type: Optional[str] = None):
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
@@ -80,6 +81,8 @@ def list_files(file_type: str = None):
     finally:
         conn.close()
     return {"files": rows}
+
+
 
 
 
