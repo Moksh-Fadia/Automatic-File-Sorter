@@ -33,30 +33,18 @@ Every file operation is tracked in `file_mover.log` for transparency and debuggi
 
 
 **Language**: Python 
+
 **Backend Framework**: FastAPI 
+
 **Database**: SQLite 
+
 **File Monitoring**: Watchdog 
+
 **Concurrency**: ThreadPoolExecutor 
+
 **Containerization**: Docker 
+
 **Logging**: Python’s `logging` module 
-
----
-
-## 🗂 Folder Structure
-
-File_Management/
-│
-├── main.py                # Core watcher + file moving logic
-├── api.py                 # FastAPI app with upload, scan, and list endpoints
-├── requirements.txt       # Dependencies
-├── Dockerfile             # Docker build configuration
-├── file_mover.log         # Log file for tracking file movements
-├── files_db.db            # SQLite database for move history
-└── /FileSorter            # The source directory being monitored
-    ├── Audio/
-    ├── Videos/
-    ├── Images/
-    └── Documents/
 
 ---
 
@@ -75,28 +63,20 @@ File_Management/
 - `/scan-existing` → Scans all destination folders and adds missing DB entries  
 - `/files` → Lists all records in the database (optional `file_type` filter)  
 
-Example responses:
-```json
-POST /upload-file
-{
-  "status": "success",
-  "message": "song.mp3 uploaded and moved to Audio"
-}
+---
+
+## 🐳 Docker Setup
+
+- Build the image: docker build -t file-sorter-api .
+- Run the container: docker run -d -p 8000:8000 --name file-sorter-container file-sorter-api
+- Access the app:
+
+1) Swagger UI: http://localhost:8000/docs
+2) Redoc UI: http://localhost:8000/redoc
 
 ---
 
-🐳 Docker Setup
-
-Build the image: docker build -t file-sorter-api .
-Run the container: docker run -d -p 8000:8000 --name file-sorter-container file-sorter-api
-Access the app:
-
-- Swagger UI: http://localhost:8000/docs
-- Redoc UI: http://localhost:8000/redoc
-
----
-
-🧪 Example API Usage
+## 🧪 Example API Usage
 
 1. Upload a File:
 - POST /upload-file (use Swagger or Postman)
@@ -112,11 +92,11 @@ Access the app:
 
 ---
 
-🧰 Requirements
+## 🧰 Requirements
 
-Install dependencies (for local run): pip install -r requirements.txt
+- Install dependencies (for local run): pip install -r requirements.txt
 
-Run the watcher (local mode): python main.py
+- Run the watcher (local mode): python main.py
 
-Run the API: uvicorn api:app --reload
+- Run the API: uvicorn api:app --reload
 
