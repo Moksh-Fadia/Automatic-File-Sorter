@@ -76,6 +76,14 @@ Every file operation is tracked in `file_mover.log` for transparency and debuggi
 
 ---
 
+## Deployment
+
+The API is deployed publicly at: [https://file-sorter-api.onrender.com/docs](https://file-sorter-api.onrender.com/docs)
+
+You can interact with it via Swagger UI at the same URL.
+
+---
+
 ## 🧪 Example API Usage
 
 1. Upload a File:
