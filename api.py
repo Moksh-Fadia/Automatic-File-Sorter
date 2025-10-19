@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException      # httpexception is used to raise http errors (eg: 404, 400, 500)
 import os    # to check if file exists
+from os import makedirs
 import sqlite3
 from main import scan_existing_files, move_file, dest_dir_music, dest_dir_video, dest_dir_image, dest_dir_documents, image_extensions, audio_extensions, video_extensions, document_extensions, move_any_file
 from os.path import join
@@ -54,14 +55,27 @@ def upload_file(file: UploadFile = File(...)):
 # UploadFile object has properties like filename, content_type, and methods like .read()
 # File(...) marks it as a required parameter   
 
+    # Ensure source and destination folders exist at runtime
+    source_dir = "./FileSorter"
+    dest_dirs = {
+        "Audio": join(source_dir, "Audio"),
+        "Videos": join(source_dir, "Videos"),
+        "Images": join(source_dir, "Images"),
+        "Documents": join(source_dir, "Documents")
+    }
+    makedirs(source_dir, exist_ok=True)
+    for folder in dest_dirs.values():
+        makedirs(folder, exist_ok=True)
+
     # save the uploaded file temporarily in the main FileSorter folder
-    temp_path = os.path.abspath(join("./FileSorter", file.filename))
+    temp_path = join(source_dir, file.filename)
     with open(temp_path, "wb") as f:
         f.write(file.file.read())
 
     try:
         move_any_file(temp_path)   # automatically moves it to the correct subfolder
     except Exception as e:
+        print(f"[ERROR] move_any_file failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"status": "success", "message": f"{file.filename} uploaded and moved successfully."}
