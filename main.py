@@ -1,6 +1,6 @@
 import os    
 from os import scandir     # scandir() returns an iterator of DirEntry objects; a DirEntry object has attributes like name, path, is_file() [checks if its a file], is_dir() [checks if its a directory]
-from os.path import splitext, exists, join    # join combines paths with /
+from os.path import splitext, exists, join, basename    # join combines paths with /
 from shutil import move     
 from time import sleep      
 import logging    
@@ -59,6 +59,11 @@ def move_file(dest, entry, name, file_type, conn=None):    # this func expects a
     if name.startswith("."):  # skip hidden files like .DS_Store
         return
 
+    # Skip if the file is already in the correct subfolder
+    if entry.path == dest:
+        logging.info(f"File already in destination: {name}")
+        return
+
     if exists(join(dest, name)):         # if any file with same name existing in destination folder (duplicate)
         name = make_unique(dest, name)
 
@@ -88,6 +93,39 @@ def move_file(dest, entry, name, file_type, conn=None):    # this func expects a
 
     if own_conn:
         conn.close()
+
+
+# this func determines the file type, finds the correct destination folder, and moves the file using move_file()
+def move_any_file(filepath):
+    filename = basename(filepath)
+    ext = os.path.splitext(filename)[1].lower()      # gets the extension of the file
+
+    if ext in audio_extensions:
+        dest = dest_dir_music
+        file_type = "Audio"
+    elif ext in video_extensions:
+        dest = dest_dir_video
+        file_type = "Videos"
+    elif ext in image_extensions:
+        dest = dest_dir_image
+        file_type = "Images"
+    elif ext in document_extensions:
+        dest = dest_dir_documents
+        file_type = "Documents"
+    else:
+        print(f"Unknown file type: {filename}")
+        return
+
+# create a tiny object that mimics the DirEntry-like object your move_file func (from main.py) expects; to reuse the same move_file() function and avoid duplicating logic, we create a tiny object that mimics those attributes and methods
+    class DummyEntry:
+        def __init__(self, path, name):
+            self.path = path
+            self.name = name
+        def is_file(self):
+            return True
+
+    dummy = DummyEntry(filepath, filename)      # creates an instance of the dummy object pointing to the file just saved
+    move_file(dest, dummy, filename, file_type)    
 
 
 # scans existing files (those files which were already present before script started running) in destination folders and adds them to the database if not already present

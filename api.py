@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException      # httpexception is used to raise http errors (eg: 404, 400, 500)
 import os    # to check if file exists
 import sqlite3
-from main import scan_existing_files, move_file, dest_dir_music, dest_dir_video, dest_dir_image, dest_dir_documents, image_extensions, audio_extensions, video_extensions, document_extensions
+from main import scan_existing_files, move_file, dest_dir_music, dest_dir_video, dest_dir_image, dest_dir_documents, image_extensions, audio_extensions, video_extensions, document_extensions, move_any_file
 from os.path import join
 from fastapi import UploadFile, File      # UploadFile handles incoming files accessing their data; File is used to specify that the endpoint expects a file upload
 
@@ -52,51 +52,18 @@ def upload_file(file: UploadFile = File(...)):
 # UploadFile = File(...): Expect an uploaded file, treat it as an UploadFile object, and receive it from the request using the File tool
 # UploadFile object has properties like filename, content_type, and methods like .read()
 # File(...) marks it as a required parameter   
-  
-    filename = file.filename
-    ext = os.path.splitext(filename)[1].lower()     # gets the extension of the file
 
-    # automatically detect type
-    if ext in audio_extensions:
-        dest = dest_dir_music
-        file_type = "audio"
-    elif ext in video_extensions:
-        dest = dest_dir_video
-        file_type = "video"
-    elif ext in image_extensions:
-        dest = dest_dir_image
-        file_type = "image"
-    elif ext in document_extensions:
-        dest = dest_dir_documents
-        file_type = "document"
-    else:
-        raise HTTPException(status_code=400, detail="Unknown file type")
-    
-    dest_path = join(dest, filename)  # combines the destination folder and the filename to get the full path where the file should be saved.
+    # save the uploaded file temporarily in the main FileSorter folder
+    temp_path = join("./FileSorter", file.filename)
+    with open(temp_path, "wb") as f:
+        f.write(file.file.read())
 
-# save uploaded file directly to destination
-    with open(dest_path, "wb") as f:    # opens a new file at dest_path in binary write mode 'wb'
-        f.write(file.file.read())    # reads all the content of the uploaded file and writes that content to disk
-
-# create a tiny object that mimics the DirEntry-like object your move_file func (from main.py) expects; to reuse the same move_file() function and avoid duplicating logic, we create a tiny object that mimics those attributes and methods
-    class DummyEntry:
-        def __init__(self, path, name): 
-            self.path = path
-            self.name = name
-        def is_file(self):
-            return True
-
-    dummy = DummyEntry(dest_path, filename)     # creates an instance of the dummy object pointing to the file just saved
-
-# move the file using your existing main.py logic
-    try:    
-        conn = get_db_connection()      # This ensures each request has its own SQLite connection
-        move_file(dest, dummy, filename, file_type, conn=conn)
-        conn.close()  
+    try:
+        move_any_file(temp_path)   # automatically moves it to the correct subfolder
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    return {"status": "success", "message": f"{filename} uploaded and moved to {dest}"}
+    return {"status": "success", "message": f"{file.filename} uploaded and moved successfully."}
 
 
 # GET endpoint that returns DB rows (files from files_table), optionally filtered by file_type query param
