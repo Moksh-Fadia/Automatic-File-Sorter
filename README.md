@@ -1,6 +1,6 @@
 # 🧠 File Organizer API
 
-A **Dockerized backend system** that automatically organizes files from a source folder into categorized destinations (Audio, Videos, Images, Documents) while maintaining a complete record of every move inside an **SQLite database**.
+A **backend system** that automatically organizes files from a source folder into categorized destinations (Audio, Videos, Images, Documents) while maintaining a complete record of every move inside an **SQLite database**.
 
 It combines **file system automation** using `watchdog` with a **FastAPI-based REST API** to upload and manage files programmatically.
 The code also includes comments for better readability and understanding.
@@ -42,8 +42,6 @@ Every file operation is tracked in `file_mover.log` for transparency and debuggi
 
 **Concurrency**: ThreadPoolExecutor 
 
-**Containerization**: Docker 
-
 **Logging**: Python’s `logging` module 
 
 ---
@@ -59,28 +57,8 @@ Every file operation is tracked in `file_mover.log` for transparency and debuggi
   - `files_db.db`
 
 ### 2️⃣ REST API (`api.py`)
-- `/upload-file` → Upload a new file (auto-detected and moved)  
-- `/scan-existing` → Scans all destination folders and adds missing DB entries  
-- `/files` → Lists all records in the database (optional `file_type` filter)  
-
----
-
-## 🐳 Docker Setup
-
-- Build the image: docker build -t file-sorter-api .
-- Run the container: docker run -d -p 8000:8000 --name file-sorter-container file-sorter-api
-- Access the app:
-
-1) Swagger UI: http://localhost:8000/docs
-2) Redoc UI: http://localhost:8000/redoc
-
----
-
-## Deployment
-
-The API is deployed publicly at: [https://file-sorter-api.onrender.com/docs](https://file-sorter-api.onrender.com/docs)
-
-You can interact with it via Swagger UI at the same URL.
+- `/upload-file` → Upload a new file (auto-detected and moved)   
+- `/files` → Lists all records in the database 
 
 ---
 
@@ -90,11 +68,7 @@ You can interact with it via Swagger UI at the same URL.
 - POST /upload-file (use Swagger or Postman)
 - Uploads file and moves it to appropriate folder.
 
-2. Scan Existing Files:
-- GET /scan-existing
-- Refreshes DB with existing files in destination folders.
-
-3. List Files:
+2. List Files:
 - GET /files
 - Returns all file records.
 
@@ -107,4 +81,8 @@ You can interact with it via Swagger UI at the same URL.
 - Run the watcher (local mode): python main.py
 
 - Run the API: uvicorn api:app --reload
+
+- Access the API documentation:
+1) Swagger UI: http://127.0.0.1:8000/docs
+2) Redoc UI: http://127.0.0.1:8000/redoc
 

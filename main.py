@@ -1,6 +1,6 @@
 import os    
 from os import scandir     # scandir() returns an iterator of DirEntry objects; a DirEntry object has attributes like name, path, is_file() [checks if its a file], is_dir() [checks if its a directory]
-from os.path import splitext, exists, join, basename    # join combines paths with /
+from os.path import splitext, exists, join   # join combines paths with /
 import shutil
 from shutil import move     
 from time import sleep      
@@ -11,7 +11,6 @@ from watchdog.events import FileSystemEventHandler      # class to handle file s
 from concurrent.futures import ThreadPoolExecutor    # for concurrent processing of multiple files
 from datetime import datetime
 import sqlite3
-from fastapi import HTTPException
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.makedirs(BASE_DIR, exist_ok=True)
@@ -62,129 +61,72 @@ def make_unique(dest, name):
     return name
 
 
-
 # dest here is the respective folder where the file is to be moved (ie. Music, Video, Image, Document)
 # The source is always the top-level FileSorter folder (where the file is intially placed). The destination is the proper subfolder inside FileSorter (where the file is eventually moved to)
-def move_file(dest, entry, name, file_type, conn=None):    # this func expects a DirEntry-like object  
+
+def move_file(file, conn=None):
+    # Determine if input is DirEntry or string path
+    if hasattr(file, "path"):  # DirEntry
+        file_path = os.path.abspath(file.path)
+        name = file.name
+    else:  # string path
+        file_path = os.path.abspath(file)
+        name = os.path.basename(file_path)
+
     if name.startswith("."):  # skip hidden files like .DS_Store
         return
 
-    # Skip if the file is already in the correct subfolder
-    if os.path.abspath(os.path.dirname(entry.path)) == os.path.abspath(dest):
+    ext = os.path.splitext(name)[1].lower()
+    if ext in audio_extensions:
+        dest = dest_dir_music
+        file_type = "Audio"
+    elif ext in video_extensions:
+        dest = dest_dir_video
+        file_type = "Video"
+    elif ext in image_extensions:
+        dest = dest_dir_image
+        file_type = "Image"
+    elif ext in document_extensions:
+        dest = dest_dir_documents
+        file_type = "Document"
+    else:
+        dest = os.path.join(source_dir, "Others")
+        file_type = "Unknown"
+
+    os.makedirs(dest, exist_ok=True)
+
+    # Skip if already in destination
+    if os.path.dirname(file_path) == dest:
         logging.info(f"File already in destination: {name}")
         return
 
-    if exists(join(dest, name)):         # if any file with same name existing in destination folder (duplicate)
+    if exists(join(dest, name)):
         name = make_unique(dest, name)
 
-# entry.path = (built-in attribute of DirEntry object) gets the full path of the file to be moved
-    src_path = os.path.abspath(entry.path)
-    dest_path = os.path.abspath(join(dest, name))
-    move(src_path, dest_path)
+    dest_path = os.path.join(dest, name)
 
-    logging.info(f"Moved file: {name} to {dest}")     # writing info to log file
-
-# inserting record
-    moved_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")     # timestamp
+    # Move the file
+    shutil.move(file_path, dest_path)
+    logging.info(f"[MOVED] {name} -> {dest_path}")
 
     # use the passed connection or create a new one
-    own_conn = False    
+    own_conn = False
     if conn is None:
         conn = sqlite3.connect(DB_FILE)
         own_conn = True
-    cursor = conn.cursor()   
+    cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT COUNT(*) FROM files_table WHERE source_path = ?           -- counts the number of rows with this source_path (ie. to avoid duplicate entries in database)
-    """, (entry.path,))
-    if cursor.fetchone()[0] == 0:    # if count is 0, ie. no such entry exists in database
+    cursor.execute("SELECT COUNT(*) FROM files_table WHERE source_path = ?", (file_path,))
+    if cursor.fetchone()[0] == 0:
         cursor.execute("""
             INSERT INTO files_table (filename, file_type, source_path, destination_path, moved_at)
             VALUES (?, ?, ?, ?, ?)
-        """, (name, file_type, entry.path, join(dest, name), moved_at))
+        """, (name, file_type, file_path, dest_path, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
-
     if own_conn:
         conn.close()
 
-
-# this func determines the file type, finds the correct destination folder, and moves the file using move_file()
-def move_any_file(file_path: str):
-    try:
-        if not os.path.exists(file_path):
-            raise FileNotFoundError(f"Source file not found: {file_path}")
-
-        name = os.path.basename(file_path)
-        ext = os.path.splitext(name)[1].lower()
-
-        # Determine file type
-        if ext in audio_extensions:
-            dest = os.path.join(source_dir, "Audio")
-            file_type = "Audio"
-        elif ext in video_extensions:
-            dest = os.path.join(source_dir, "Videos")
-            file_type = "Video"
-        elif ext in image_extensions:
-            dest = os.path.join(source_dir, "Images")
-            file_type = "Image"
-        elif ext in document_extensions:
-            dest = os.path.join(source_dir, "Documents")
-            file_type = "Document"
-        else:
-            file_type = "Unknown"
-            dest = os.path.join(source_dir, "Others")
-
-        os.makedirs(dest, exist_ok=True)
-
-        dest_path = os.path.join(dest, name)
-
-        # using shutil.move (works across different file systems)
-        shutil.move(file_path, dest_path)
-
-        # logging to the DB
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO files_table (filename, file_type, source_path, destination_path, moved_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (name, file_type, file_path, dest_path, datetime.now().isoformat()))
-        conn.commit()
-        conn.close()
-
-        logging.info(f"[MOVED] {name} -> {dest_path}")
-        return {"filename": name, "file_type": file_type, "destination": dest_path}
-
-    except Exception as e:
-        logging.error(f"[ERROR moving file] {file_path}: {e}")
-        raise  
-
-
-# scans existing files (those files which were already present before script started running) in destination folders and adds them to the database if not already present
-def scan_existing_files(cursor, conn):
-    categories = {
-        "Audio": dest_dir_music,
-        "Videos": dest_dir_video,
-        "Images": dest_dir_image,
-        "Documents": dest_dir_documents
-    }
-
-    for file_type, folder in categories.items():     
-# file_type = key (Audio, Videos, Images, Documents); folder = value (respective folder path)
-        if not os.path.exists(folder):
-            continue
-        for filename in os.listdir(folder):  
-            if filename.startswith("."):     # skips .DS_Store and any hidden files
-                continue 
-# os.listdir(folder) returns a list of all entries (ie. files and subfolders) in that respective folder
-            file_path = os.path.join(folder, filename)     # combines the folder path and the filename to get the full path to the file
-            if os.path.isfile(file_path):   # checks if the path is a file (not a directory)
-                cursor.execute("SELECT COUNT(*) FROM files_table WHERE source_path = ?", (file_path,))
-                if cursor.fetchone()[0] == 0:
-                    cursor.execute("""
-                        INSERT INTO files_table (filename, file_type, source_path, destination_path, moved_at)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (filename, file_type, file_path, file_path, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
-    conn.commit()   
+    return {"filename": name, "file_type": file_type, "destination": dest_path}
 
 
 class MoverHandler(FileSystemEventHandler):      # base class to respond to file system events; its job is to define what should happen when files change in the folder
@@ -243,19 +185,19 @@ class MoverHandler(FileSystemEventHandler):      # base class to respond to file
             move_file(dest_dir_documents, entry, name, "document")
 
 
-# if __name__ == "__main__":        # only runs if this python file is executed directly
-#     event_handler = MoverHandler()      # creates an instance of MoverHandler class (inherits from Watchdog); it is passed to observer.schedule() so that the observer knows which handler to call when files change
-#     event_handler.process_existing_files()  # process files already in folder
-#     observer = Observer()       # creates an observer object to observe the source_dir
-#     observer.schedule(event_handler, source_dir, recursive=True)     # schedules the event handler to monitor source_dir; recursive=True means it will monitor all subdfolders of source_dir too
-#     observer.start()       # starts monitoring the thread
-#     print(f"Monitoring {source_dir} ...")
+if __name__ == "__main__":        # only runs if this python file is executed directly
+    event_handler = MoverHandler()      # creates an instance of MoverHandler class (inherits from Watchdog); it is passed to observer.schedule() so that the observer knows which handler to call when files change
+    event_handler.process_existing_files()  # process files already in folder
+    observer = Observer()       # creates an observer object to observe the source_dir
+    observer.schedule(event_handler, source_dir, recursive=True)     # schedules the event handler to monitor source_dir; recursive=True means it will monitor all subdfolders of source_dir too
+    observer.start()       # starts monitoring the thread
+    print(f"Monitoring {source_dir} ...")
 
-#     try:
-#         while True:
-#             sleep(1)     # main thread sleeps for 1 second and then checks again; to not consume too much CPU
-#     except KeyboardInterrupt:   # if user presses Ctrl+C to stop the program
-#         observer.stop()
-#     observer.join()     # waits for the observer thread to finish completely before exiting the program; without join() the program might exit immediately and leave Watchdog threads hanging  
+    try:
+        while True:
+            sleep(1)     # main thread sleeps for 1 second and then checks again; to not consume too much CPU
+    except KeyboardInterrupt:   # if user presses Ctrl+C to stop the program
+        observer.stop()
+    observer.join()     # waits for the observer thread to finish completely before exiting the program; without join() the program might exit immediately and leave Watchdog threads hanging  
      
 

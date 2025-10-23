@@ -1,8 +1,7 @@
 from fastapi import FastAPI, HTTPException      # httpexception is used to raise http errors (eg: 404, 400, 500)
 import os    # to check if file exists
-from os import makedirs
 import sqlite3
-from main import scan_existing_files, move_any_file, DB_FILE, source_dir
+from main import move_file, DB_FILE, source_dir
 from os.path import join  
 from fastapi import UploadFile, File      # UploadFile handles incoming files accessing their data; File is used to specify that the endpoint expects a file upload
 from typing import Optional
@@ -32,20 +31,6 @@ def get_db_connection():
     return conn
 
 
-# it triggers a one-time scan of existing files in the destination folders and add entries to the DB, meaning When this endpoint is called, it goes through the file directories (like music, videos, etc.) and updates the database with whatever files are already there; basically a refresh-data button
-@app.get("/scan-existing")      # registers a GET endpoint
-def scan_files():
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-# instead of using a global cursor (which is thread-unsafe), we pass the cursor from the request-specific connection; this way each fastapi request uses its own db connection and cursor, preventing the SQLite threading error        
-        scan_existing_files(cursor, conn)  # modified scan_existing_files to accept cursor
-        conn.close()
-        return {"status": "success", "message": "Existing files scanned and added to DB."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 # Note:- type of error which occurs when we dont this: 'SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 8382603584 and this is thread id 6109884416'
 # it means we cannot share sqlite connection or cursor objects between threads. each thread must open its own connection and create its own cursor
 
@@ -65,7 +50,7 @@ def upload_file(file: UploadFile = File(...)):
         f.write(file.file.read())
 
     try:
-        result = move_any_file(temp_path)   # automatically moves it to the correct subfolder
+        result = move_file(temp_path)   # automatically moves it to the correct subfolder
         print(f"[DEBUG] move_any_file() returned: {result}")
     except Exception as e:
         print(f"[ERROR] move_any_file() crashed:\n{traceback.format_exc()}")
