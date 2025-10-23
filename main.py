@@ -33,7 +33,8 @@ dest_dir_video = os.path.join(source_dir, "Videos")
 dest_dir_image = os.path.join(source_dir, "Images")
 dest_dir_documents = os.path.join(source_dir, "Documents")
 
-for folder in [source_dir, dest_dir_music, dest_dir_video, dest_dir_image, dest_dir_documents]:
+# making sure all directories exist at startup
+for folder in [source_dir, dest_dir_music, dest_dir_video, dest_dir_image, dest_dir_documents]:  
     os.makedirs(folder, exist_ok=True)
 
 image_extensions = [".jpg", ".jpeg", ".jpe", ".jif", ".jfif", ".jfi", ".png", ".gif", ".webp", ".tiff", ".tif",
@@ -242,19 +243,19 @@ class MoverHandler(FileSystemEventHandler):      # base class to respond to file
             move_file(dest_dir_documents, entry, name, "document")
 
 
-if __name__ == "__main__":        # only runs if this python file is executed directly
-    event_handler = MoverHandler()      # creates an instance of MoverHandler class (inherits from Watchdog); it is passed to observer.schedule() so that the observer knows which handler to call when files change
-    event_handler.process_existing_files()  # process files already in folder
-    observer = Observer()       # creates an observer object to observe the source_dir
-    observer.schedule(event_handler, source_dir, recursive=True)     # schedules the event handler to monitor source_dir; recursive=True means it will monitor all subdfolders of source_dir too
-    observer.start()       # starts monitoring the thread
-    print(f"Monitoring {source_dir} ...")
+# if __name__ == "__main__":        # only runs if this python file is executed directly
+#     event_handler = MoverHandler()      # creates an instance of MoverHandler class (inherits from Watchdog); it is passed to observer.schedule() so that the observer knows which handler to call when files change
+#     event_handler.process_existing_files()  # process files already in folder
+#     observer = Observer()       # creates an observer object to observe the source_dir
+#     observer.schedule(event_handler, source_dir, recursive=True)     # schedules the event handler to monitor source_dir; recursive=True means it will monitor all subdfolders of source_dir too
+#     observer.start()       # starts monitoring the thread
+#     print(f"Monitoring {source_dir} ...")
 
-    try:
-        while True:
-            sleep(1)     # main thread sleeps for 1 second and then checks again; to not consume too much CPU
-    except KeyboardInterrupt:   # if user presses Ctrl+C to stop the program
-        observer.stop()
-    observer.join()     # waits for the observer thread to finish completely before exiting the program; without join() the program might exit immediately and leave Watchdog threads hanging  
+#     try:
+#         while True:
+#             sleep(1)     # main thread sleeps for 1 second and then checks again; to not consume too much CPU
+#     except KeyboardInterrupt:   # if user presses Ctrl+C to stop the program
+#         observer.stop()
+#     observer.join()     # waits for the observer thread to finish completely before exiting the program; without join() the program might exit immediately and leave Watchdog threads hanging  
      
 
