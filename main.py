@@ -1,6 +1,7 @@
 import os    
 from os import scandir     # scandir() returns an iterator of DirEntry objects; a DirEntry object has attributes like name, path, is_file() [checks if its a file], is_dir() [checks if its a directory]
 from os.path import splitext, exists, join, basename    # join combines paths with /
+import shutil
 from shutil import move     
 from time import sleep      
 import logging    
@@ -12,19 +13,25 @@ from datetime import datetime
 import sqlite3
 from fastapi import HTTPException
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+os.makedirs(BASE_DIR, exist_ok=True)
+
+LOG_FILE = os.path.join(BASE_DIR, "file_mover.log")
+DB_FILE = os.path.join(BASE_DIR, "files_db.db")
+
 # Logging configuration
 logging.basicConfig(
-    filename="file_mover.log",   # logs will be written to the file named file_mover.log; this file is pure record-keeping (we nerver edit it manualy) it basically keeps a record of what files moved, when, or if something failed; for debugging and tracking purposes
+    filename=LOG_FILE,   # logs will be written to the file named file_mover.log; this file is pure record-keeping (we nerver edit it manualy) it basically keeps a record of what files moved, when, or if something failed; for debugging and tracking purposes
     level=logging.INFO,      # records INFO level and above (WARNING, ERROR, CRITICAL)
     format='%(asctime)s - %(message)s',     # timestamp - message
     datefmt='%Y-%m-%d %H:%M:%S')
 
 # setup
-source_dir = "./FileSorter"       
-dest_dir_music = join(source_dir, "Audio")   
-dest_dir_video = join(source_dir, "Videos")     
-dest_dir_image = join(source_dir, "Images")
-dest_dir_documents = join(source_dir, "Documents")
+source_dir = os.path.join(BASE_DIR, "FileSorter")      
+dest_dir_music = os.path.join(source_dir, "Audio")
+dest_dir_video = os.path.join(source_dir, "Videos")
+dest_dir_image = os.path.join(source_dir, "Images")
+dest_dir_documents = os.path.join(source_dir, "Documents")
 
 for folder in [source_dir, dest_dir_music, dest_dir_video, dest_dir_image, dest_dir_documents]:
     os.makedirs(folder, exist_ok=True)
@@ -62,7 +69,7 @@ def move_file(dest, entry, name, file_type, conn=None):    # this func expects a
         return
 
     # Skip if the file is already in the correct subfolder
-    if entry.path == dest:
+    if os.path.abspath(os.path.dirname(entry.path)) == os.path.abspath(dest):
         logging.info(f"File already in destination: {name}")
         return
 
@@ -82,7 +89,7 @@ def move_file(dest, entry, name, file_type, conn=None):    # this func expects a
     # use the passed connection or create a new one
     own_conn = False    
     if conn is None:
-        conn = sqlite3.connect("files_db.db")
+        conn = sqlite3.connect(DB_FILE)
         own_conn = True
     cursor = conn.cursor()   
 
@@ -101,38 +108,54 @@ def move_file(dest, entry, name, file_type, conn=None):    # this func expects a
 
 
 # this func determines the file type, finds the correct destination folder, and moves the file using move_file()
-def move_any_file(filepath):
-    filename = basename(filepath)
-    ext = os.path.splitext(filename)[1].lower()      # gets the extension of the file
+def move_any_file(file_path: str):
+    try:
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Source file not found: {file_path}")
 
-    if ext in audio_extensions:
-        dest = dest_dir_music
-        file_type = "Audio"
-    elif ext in video_extensions:
-        dest = dest_dir_video
-        file_type = "Videos"
-    elif ext in image_extensions:
-        dest = dest_dir_image
-        file_type = "Images"
-    elif ext in document_extensions:
-        dest = dest_dir_documents
-        file_type = "Documents"
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown file type: {filename}"
-        )
+        name = os.path.basename(file_path)
+        ext = os.path.splitext(name)[1].lower()
 
-# create a tiny object that mimics the DirEntry-like object your move_file func (from main.py) expects; to reuse the same move_file() function and avoid duplicating logic, we create a tiny object that mimics those attributes and methods
-    class DummyEntry:
-        def __init__(self, path, name):
-            self.path = path
-            self.name = name
-        def is_file(self):
-            return True
+        # Determine file type
+        if ext in audio_extensions:
+            dest = os.path.join(source_dir, "Audio")
+            file_type = "Audio"
+        elif ext in video_extensions:
+            dest = os.path.join(source_dir, "Videos")
+            file_type = "Video"
+        elif ext in image_extensions:
+            dest = os.path.join(source_dir, "Images")
+            file_type = "Image"
+        elif ext in document_extensions:
+            dest = os.path.join(source_dir, "Documents")
+            file_type = "Document"
+        else:
+            file_type = "Unknown"
+            dest = os.path.join(source_dir, "Others")
 
-    dummy = DummyEntry(filepath, filename)      # creates an instance of the dummy object pointing to the file just saved
-    move_file(dest, dummy, filename, file_type)    
+        os.makedirs(dest, exist_ok=True)
+
+        dest_path = os.path.join(dest, name)
+
+        # using shutil.move (works across different file systems)
+        shutil.move(file_path, dest_path)
+
+        # logging to the DB
+        conn = sqlite3.connect(DB_FILE)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO files_table (filename, file_type, source_path, destination_path, moved_at)
+            VALUES (?, ?, ?, ?, ?)
+        """, (name, file_type, file_path, dest_path, datetime.now().isoformat()))
+        conn.commit()
+        conn.close()
+
+        logging.info(f"[MOVED] {name} -> {dest_path}")
+        return {"filename": name, "file_type": file_type, "destination": dest_path}
+
+    except Exception as e:
+        logging.error(f"[ERROR moving file] {file_path}: {e}")
+        raise  
 
 
 # scans existing files (those files which were already present before script started running) in destination folders and adds them to the database if not already present

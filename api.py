@@ -2,12 +2,13 @@ from fastapi import FastAPI, HTTPException      # httpexception is used to raise
 import os    # to check if file exists
 from os import makedirs
 import sqlite3
-from main import scan_existing_files, move_file, dest_dir_music, dest_dir_video, dest_dir_image, dest_dir_documents, image_extensions, audio_extensions, video_extensions, document_extensions, move_any_file
-from os.path import join
+from main import scan_existing_files, move_any_file, DB_FILE, source_dir
+from os.path import join  
 from fastapi import UploadFile, File      # UploadFile handles incoming files accessing their data; File is used to specify that the endpoint expects a file upload
 from typing import Optional
+import traceback
 
-conn = sqlite3.connect("files_db.db")
+conn = sqlite3.connect(DB_FILE)
 cursor = conn.cursor()     # creates a cursor object to execute SQL commands
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS files_table (
@@ -20,13 +21,14 @@ CREATE TABLE IF NOT EXISTS files_table (
 )
 """)
 conn.commit()     # commits the changes to the database
+conn.close()
 
 app = FastAPI(title="File Organizer API")    # creates fastapi application instance (we'' register endpoints to this app)
 
 # creates and return a new sqlite3 connection for each request bcoz sqlite3 connections cannot be shared across threads 
 # every time an endpoint is hit, get_db_connection() is called, it opens a fresh connection to the .db file, we use it for that one request, and close it when done (every request gets its own independent connection); this prevents “database is locked” errors 
 def get_db_connection():
-    conn = sqlite3.connect("files_db.db")
+    conn = sqlite3.connect(DB_FILE)
     return conn
 
 
@@ -55,27 +57,18 @@ def upload_file(file: UploadFile = File(...)):
 # UploadFile object has properties like filename, content_type, and methods like .read()
 # File(...) marks it as a required parameter   
 
-    # Ensure source and destination folders exist at runtime
-    source_dir = "./FileSorter"
-    dest_dirs = {
-        "Audio": join(source_dir, "Audio"),
-        "Videos": join(source_dir, "Videos"),
-        "Images": join(source_dir, "Images"),
-        "Documents": join(source_dir, "Documents")
-    }
-    makedirs(source_dir, exist_ok=True)
-    for folder in dest_dirs.values():
-        makedirs(folder, exist_ok=True)
+    os.makedirs(source_dir, exist_ok=True)
+    temp_path = os.path.join(source_dir, file.filename)     # save the uploaded file temporarily in the main FileSorter folder
+    print(f"[DEBUG] Saving to {temp_path}")
 
-    # save the uploaded file temporarily in the main FileSorter folder
-    temp_path = join(source_dir, file.filename)
     with open(temp_path, "wb") as f:
         f.write(file.file.read())
 
     try:
-        move_any_file(temp_path)   # automatically moves it to the correct subfolder
+        result = move_any_file(temp_path)   # automatically moves it to the correct subfolder
+        print(f"[DEBUG] move_any_file() returned: {result}")
     except Exception as e:
-        print(f"[ERROR] move_any_file failed: {e}")
+        print(f"[ERROR] move_any_file() crashed:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"status": "success", "message": f"{file.filename} uploaded and moved successfully."}
@@ -95,6 +88,7 @@ def list_files(file_type: Optional[str] = None):
     finally:
         conn.close()
     return {"files": rows}
+
 
 
 
