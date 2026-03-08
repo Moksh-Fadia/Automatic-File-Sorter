@@ -16,13 +16,10 @@ Monitors a folder in real time and moves files to their respective subfolders ba
 Upload files, trigger rescans, and list organized files via clean API endpoints.
 
 -> **Database Logging (SQLite):**  
-Every file move is stored with timestamps, source/destination paths, and type — ensuring traceability.
+Every file move is stored with timestamps, source/destination paths, and type thereby ensuring traceability.
 
 -> **Threaded Processing:**  
 Uses `ThreadPoolExecutor` for efficient, concurrent file handling.
-
--> **Containerized (Docker):**  
-Easily deployable anywhere — no dependency hell, no setup headaches.
 
 -> **Logging:**  
 Every file operation is tracked in `file_mover.log` for transparency and debugging.
@@ -31,17 +28,11 @@ Every file operation is tracked in `file_mover.log` for transparency and debuggi
 
 ## Tech Stack
 
-
 **Language**: Python 
-
 **Backend Framework**: FastAPI 
-
 **Database**: SQLite 
-
 **File Monitoring**: Watchdog 
-
 **Concurrency**: ThreadPoolExecutor 
-
 **Logging**: Python’s `logging` module 
 
 ---
