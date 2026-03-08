@@ -1,4 +1,4 @@
-# 🧠 File Organizer API
+# Automatic File Sorter
 
 A **backend system** that automatically organizes files from a source folder into categorized destinations (Audio, Videos, Images, Documents) while maintaining a complete record of every move inside an **SQLite database**.
 
@@ -7,7 +7,7 @@ The code also includes comments for better readability and understanding.
 
 ---
 
-## 🚀 Features
+## Features
 
 -> **Automatic Sorting:**  
 Monitors a folder in real time and moves files to their respective subfolders based on type (audio, video, image, document).
@@ -29,7 +29,7 @@ Every file operation is tracked in `file_mover.log` for transparency and debuggi
 
 ---
 
-## 🧩 Tech Stack
+## Tech Stack
 
 
 **Language**: Python 
@@ -46,7 +46,7 @@ Every file operation is tracked in `file_mover.log` for transparency and debuggi
 
 ---
 
-## ⚙️ How It Works
+## How It Works
 
 ### 1️⃣ Watchdog + File Mover (`main.py`)
 - Watches `/FileSorter` for new or modified files  
@@ -62,7 +62,7 @@ Every file operation is tracked in `file_mover.log` for transparency and debuggi
 
 ---
 
-## 🧪 Example API Usage
+## Example API Usage
 
 1. Upload a File:
 - POST /upload-file (use Swagger or Postman)
@@ -74,7 +74,7 @@ Every file operation is tracked in `file_mover.log` for transparency and debuggi
 
 ---
 
-## 🧰 Requirements
+## Requirements
 
 - Install dependencies (for local run): pip install -r requirements.txt
 
