@@ -1,29 +1,18 @@
-<<<<<<< HEAD
 # macOS
 .DS_Store
 
 # Python
 __pycache__/
 *.pyc
-=======
+
 # Ignore generated files
 FileSorter/*
-!FileSorter/.gitkeep
->>>>>>> 490c168 (Added performance metrics and scalability details)
+!FileSorter/**/
+!FileSorter/**/.gitkeep
 
 # Logs & DB
 *.db
 *.log
-
-<<<<<<< HEAD
-# Ignore FileSorter contents
-FileSorter/*
-!FileSorter/.gitkeep
-=======
-# Python
-__pycache__/
-*.pyc
->>>>>>> 490c168 (Added performance metrics and scalability details)
 
 # Env
 venv/
