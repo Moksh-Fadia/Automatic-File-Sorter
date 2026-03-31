@@ -11,6 +11,7 @@ from watchdog.events import FileSystemEventHandler      # class to handle file s
 from concurrent.futures import ThreadPoolExecutor    # for concurrent processing of multiple files
 from datetime import datetime
 import sqlite3
+import time
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.makedirs(BASE_DIR, exist_ok=True)
@@ -65,6 +66,8 @@ def make_unique(dest, name):
 # The source is always the top-level FileSorter folder (where the file is intially placed). The destination is the proper subfolder inside FileSorter (where the file is eventually moved to)
 
 def move_file(file, conn=None):
+    start_time = time.time()   # to find time taken to move the file and log it
+
     # Determine if input is DirEntry or string path
     if hasattr(file, "path"):  # DirEntry
         file_path = os.path.abspath(file.path)
@@ -126,25 +129,24 @@ def move_file(file, conn=None):
     if own_conn:
         conn.close()
 
+    end_time = time.time()   # end timer
+    print(f"[TIME] {name} processed in {end_time - start_time:.4f} sec")    
+
     return {"filename": name, "file_type": file_type, "destination": dest_path}
 
 
 class MoverHandler(FileSystemEventHandler):      # base class to respond to file system events; its job is to define what should happen when files change in the folder
 
 # Processes/works for all files that are created/modified in source_dir after startup ie. when script is running   
-    def on_modified(self):     # called automatically when any file in source_dir changes (created, edited)
-        with scandir(source_dir) as entries:     # iterates over all files in source_dir (FileSorter folder)
-            for entry in entries:      # entry is a DirEntry object with attributes like name, path, is_file(), is_dir()        
-# each entry is a file/folder in source_dir (FileSorter)
-                if entry.name.startswith(".") or not entry.is_file():
-                    continue
+    def on_created(self, event):     # triggered when a new file is created in the monitored folder
+# event eg: FileSorter/photo.jpg        
+        if event.is_directory:      # ignore folders (.is_directory is for folders, we only want to process files)
+            return
 
-                name = entry.name           
-                executor.submit(self.check_audio_files, entry, name)    
-                executor.submit(self.check_video_files, entry, name)    
-                executor.submit(self.check_image_files, entry, name)    
-                executor.submit(self.check_document_files, entry, name)
-# executor.submit = instead of checking one after another sequentially, it submits all 4 checks (audio, video, image, document) to run concurrently in separate threads                  
+        file_path = event.src_path   # get path of the created file 
+        print(f"[EVENT DETECTED] New file: {file_path}")
+
+        executor.submit(move_file, file_path)   # this sends the file to move_file() to be processed in a separate thread, allowing the main thread to continue monitoring for new events without delay; move_file() will handle moving the file to the correct subfolder and logging the action; using executor.submit() allows us to process multiple files concurrently if they are created in quick succession, improving performance and responsiveness of the script              
 
 # Processes/works for all files already present in source_dir at startup/before ie. when script has not yet started running
     def process_existing_files(self):
@@ -153,37 +155,8 @@ class MoverHandler(FileSystemEventHandler):      # base class to respond to file
                 if entry.name.startswith(".") or not entry.is_file():
                     continue
 
-                name = entry.name
-                executor.submit(self.check_audio_files, entry, name)
-                executor.submit(self.check_video_files, entry, name)
-                executor.submit(self.check_image_files, entry, name)
-                executor.submit(self.check_document_files, entry, name)    
-
-
-    def check_audio_files(self, entry, name):
-        if name.startswith(".") or not entry.is_file():  # skip hidden files and folders
-            return
-        if any(name.lower().endswith(ext) for ext in audio_extensions):
-            move_file(dest_dir_music, entry, name, "audio")
-
-    def check_video_files(self, entry, name):
-        if name.startswith(".") or not entry.is_file():  # skip hidden files and folders
-            return        
-        if any(name.lower().endswith(ext) for ext in video_extensions):
-            move_file(dest_dir_video, entry, name, "video")
-
-    def check_image_files(self, entry, name):
-        if name.startswith(".") or not entry.is_file():  # skip hidden files and folders
-            return        
-        if any(name.lower().endswith(ext) for ext in image_extensions):
-            move_file(dest_dir_image, entry, name, "image")
-
-    def check_document_files(self, entry, name):
-        if name.startswith(".") or not entry.is_file():  # skip hidden files and folders
-            return        
-        if any(name.lower().endswith(ext) for ext in document_extensions):
-            move_file(dest_dir_documents, entry, name, "document")
-
+                executor.submit(move_file, entry)   
+                
 
 if __name__ == "__main__":        # only runs if this python file is executed directly
     event_handler = MoverHandler()      # creates an instance of MoverHandler class (inherits from Watchdog); it is passed to observer.schedule() so that the observer knows which handler to call when files change
