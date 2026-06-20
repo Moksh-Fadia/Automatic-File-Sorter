@@ -1,39 +1,12 @@
-from fastapi import FastAPI, HTTPException      # httpexception is used to raise http errors (eg: 404, 400, 500)
+from fastapi import FastAPI, HTTPException     # httpexception is used to raise http errors (eg: 404, 400, 500) when api fails
 import os    # to check if file exists
-import sqlite3
-from main import move_file, DB_FILE, source_dir
-from os.path import join  
+from db import get_connection, initialize_database
+from main import move_file, source_dir
 from fastapi import UploadFile, File      # UploadFile handles incoming files accessing their data; File is used to specify that the endpoint expects a file upload
-from typing import Optional
-import traceback
 
-conn = sqlite3.connect(DB_FILE)
-cursor = conn.cursor()     # creates a cursor object to execute SQL commands
-cursor.execute("""
-CREATE TABLE IF NOT EXISTS files_table (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    filename TEXT,
-    file_type TEXT,
-    source_path TEXT,
-    destination_path TEXT,
-    moved_at TEXT      
-)
-""")
-conn.commit()     # commits the changes to the database
-conn.close()
+initialize_database()    # initialize the database and create the files_table if it doesn't exist; this ensures that the database is ready to store file metadata before any API requests are processed
 
-app = FastAPI(title="File Organizer API")    # creates fastapi application instance (we'' register endpoints to this app)
-
-# creates and return a new sqlite3 connection for each request bcoz sqlite3 connections cannot be shared across threads 
-# every time an endpoint is hit, get_db_connection() is called, it opens a fresh connection to the .db file, we use it for that one request, and close it when done (every request gets its own independent connection); this prevents “database is locked” errors 
-def get_db_connection():
-    conn = sqlite3.connect(DB_FILE)
-    return conn
-
-
-# Note:- type of error which occurs when we dont this: 'SQLite objects created in a thread can only be used in that same thread. The object was created in thread id 8382603584 and this is thread id 6109884416'
-# it means we cannot share sqlite connection or cursor objects between threads. each thread must open its own connection and create its own cursor
-
+app = FastAPI(title="File Organizer API")    # creates fastapi application instance (we register endpoints to this app)
 
 # api endpoint (URL) that handles post requests (like file uploads)
 @app.post("/upload-file")
@@ -42,38 +15,37 @@ def upload_file(file: UploadFile = File(...)):
 # UploadFile object has properties like filename, content_type, and methods like .read()
 # File(...) marks it as a required parameter   
 
-    os.makedirs(source_dir, exist_ok=True)
-    temp_path = os.path.join(source_dir, file.filename)     # save the uploaded file temporarily in the main FileSorter folder
-    print(f"[DEBUG] Saving to {temp_path}")
+    os.makedirs(source_dir, exist_ok=True)   # create source folder (source_dir) if it doesn't exist (in case user tries to upload before running main.py for the first time, which creates the source_dir) - this prevents "No such file or directory" error when trying to save the uploaded file
 
+    temp_path = os.path.join(source_dir, file.filename)     # create a temporary path for the uploaded file in the source_dir
+  
     with open(temp_path, "wb") as f:
-        f.write(file.file.read())
+        f.write(file.file.read())   # read the contents of the uploaded file and write it to the temp_path; we open the file in binary mode ("wb") to ensure that all types of files (text, images, pdf, etc.) are handled correctly without encoding issues
+# file.file.read() reads the entire content of the uploaded file into memory, and f.write() writes that content to the temporary file on disk. This effectively saves the uploaded file to the source_dir 
+
+# these above 2 steps basically save the uploaded file temporarily in the main FileSorter folder. this is done bcoz move_file() expects the file to be in the source_dir and we are uploading the file through the FastAPI endpoint (SwaggerUI), so technically the file isnt yet present in the FileSorter folder (for it to start the file sorting process). So we first save it there so move_file() can process it  
 
     try:
-        result = move_file(temp_path)   # automatically moves it to the correct subfolder
-        print(f"[DEBUG] move_any_file() returned: {result}")
+        move_file(temp_path)   # automatically moves it to the correct subfolder
     except Exception as e:
-        print(f"[ERROR] move_any_file() crashed:\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
     return {"status": "success", "message": f"{file.filename} uploaded and moved successfully."}
 
 
-# GET endpoint that returns DB rows (files from files_table), optionally filtered by file_type query param
+# GET endpoint that returns DB rows (files from files_table)
 @app.get("/files")
-def list_files(file_type: Optional[str] = None):
-    conn = get_db_connection()
+def list_files():
+    conn = get_connection()
     cursor = conn.cursor()
-    try:
-        if file_type:
-            cursor.execute("SELECT * FROM files_table WHERE file_type = ?", (file_type,))
-        else:
-            cursor.execute("SELECT * FROM files_table")
-        rows = cursor.fetchall()
-    finally:
-        conn.close()
-    return {"files": rows}
 
+    cursor.execute("SELECT * FROM files_table")
+
+    rows = cursor.fetchall()
+
+    conn.close()
+    return {"files": rows}
+# this basically fetches all the records from the files_table and returns them as a JSON response when the /files endpoint is accessed with a GET request. Each record contains metadata about the files that have been uploaded and moved, such as filename, file type, source path, destination path, and the time they were moved.
 
 
 
